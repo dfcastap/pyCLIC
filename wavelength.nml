@@ -1,0 +1,7 @@
+$lambdas 
+
+ blambda = 8000.0
+ tlambda = 20000.0
+ x = 1.0d0 
+
+$end 
