@@ -5,7 +5,7 @@ Created on Mon Mar  11 14:07:46 2013
 @author: Diego Castaneda
 """
 #### MPI run?----
-is_mpi = False
+is_mpi = True
 #### ------------
 
 import numpy as np
@@ -29,7 +29,7 @@ nzth = 200	# Theta zones
 dth = 180./nzth
 dphi = 360./nzphi
 d = 1.	# Distance to star [pc]
-incl = [0.0,10.,20.,30.,45.,50.,60.,70.,80.,90.]	# Inclinations to compute [deg]
+incl = [0.0]	# Inclinations to compute [deg]
 # Atmospheric Grid Specs:
 if (len(sys.argv) > 4):
    dt_grid = float(sys.argv[4])	# Step in Teff [Teff]
@@ -61,7 +61,7 @@ if(dopp!=0):
     flambda=ilambda+99
     
     
-wavmax = 1000. # [angstrom]
+wavmax = 250. # [angstrom]
 
 
 #Speed of light
@@ -69,23 +69,17 @@ c= 2.99792458e10
 #Additional suffix for output? if yes, wavelength range will be pasted in filename
 sffx = True
 #Atmospheres directory
-atmdir = "/home/diego/Documents/pyCLIC/atms/"
+atmdir = "/home/castaned/atmospheres/"
 
 which_os="linux"
 
-################ MPI DEF ####################
 if is_mpi==True:
-
+################ MPI DEF ####################
 	comm = MPI.COMM_WORLD
 	rank = comm.Get_rank()
 	size = comm.Get_size()
 
-else:
-    rank = 0
-    size = 1
-    incl = [incl[0]]
 ##############################################
-
 
 # Definition of functions
 
@@ -164,19 +158,6 @@ def copyatmfiles(atmdir,atmfiles):
 			#subprocess.call(["gunzip",atmfiles[i]+".gz"],shell=True)
     return
     
-def copyatmfiles_i(atmdir,atmfiles):
-    global which_os
-    
-    for i in range(len(atmfiles)):
-		tmpfl = glob.glob(atmdir+atmfiles[i]+".i")
-		os.system("cp "+tmpfl[0]+" "+os.getcwd())
-		#if(which_os=="windows"):
-		#	subprocess.call(["bin/gzip","-d",atmfiles[i]+".gz"],shell=True)
-		#elif(which_os=="linux"):
-			#os.system("gunzip "+atmfiles[i]+".gz")
-			#subprocess.call(["gunzip",atmfiles[i]+".gz"],shell=True)
-    return
-    
 def interpatms(atmfiles,ilambda,flambda,dlambda):
     global which_os
     f = open('wavelength.nml','w')
@@ -230,7 +211,7 @@ correct = np.sqrt(1.+interpmodel[:,-1]**2/(interpmodel[:,1]*np.deg2rad(model_dth
 #Cossquiggle and darea calculation for every point in the grid:
 for angle in phi:
 	if is_mpi == True:
-		xitemp = xi(incl[rank],interpmodel[:,1],interpmodel[:,0],interpmodel[:,-1],angle)
+		xitemp = xi(incl[0],interpmodel[:,1],interpmodel[:,0],interpmodel[:,-1],angle)
 	else:
 		xitemp = xi(incl[0],interpmodel[:,1],interpmodel[:,0],interpmodel[:,-1],angle)
 	cossquiggle.append(xitemp)
@@ -268,12 +249,13 @@ if is_mpi == True:
 		np.savetxt("tmp/darea",darea)
 		np.savetxt("tmp/tandg",tandg)
 		np.savetxt("tmp/atmkeys",atmkeys,fmt="%i")
+		np.savetxt("tmp/cossquiggle_i"+str(incl[rank]),cossquiggle)
+		np.savetxt("tmp/doppler_arr_i"+str(incl[rank]),doppler_arr)
 		sendmsg = True
 	else:
 		sendmsg = None
 	recvmsg = comm.bcast(sendmsg, root=0)
-	np.savetxt("tmp/cossquiggle_i"+str(incl[rank]),cossquiggle)
-	np.savetxt("tmp/doppler_arr_i"+str(incl[rank]),doppler_arr)
+	
 else:
 	try:
 		os.mkdir("tmp")
@@ -311,15 +293,13 @@ if is_mpi == True:
 		sendmsg = None
 	recvmsg = comm.bcast(sendmsg, root=0)
 """
-print "here"
-copyatmfiles_i(atmdir,atmfiles)
 # Number of intensity angles in     
 ntheta = 32
 angles = np.empty(ntheta)
 atmfname = "atmfilelist"
 nfnames = len(atmfiles)
 if is_mpi==True:
-    ext = str(incl[rank])
+    ext = str(incl[0])
 else:
     ext = str(incl[0])
     
@@ -328,48 +308,61 @@ nwav = int((flambda-ilambda)/dlambda)
 wav = np.empty(nwav)
 
 angles = np.empty(ntheta)
-ftable = np.empty([nwav,ntheta,nfnames])
-ftableout = f.fluxtable(ftable,wav,angles,atmfname,nfnames,ntheta,nwav)
-ftable = ftableout[0]
-wav = ftableout[1]
+#ftable = np.empty([nwav,ntheta,nfnames])
+#ftableout = f.fluxtable(ftable,wav,angles,atmfname,nfnames,ntheta,nwav)
+#ftable = ftableout[0]
+#wav = ftableout[1]
 wavmax = wavmax/dlambda 
 done = 0
+wave_div = int((flambda-ilambda)/size)
+wave_div_mod = (flambda-ilambda)%size
+ilambdita = rank*wave_div + ilambda
+flambdita = (rank+1)*wave_div + ilambda
+if rank == size-1:
+   flambdita = flambdita+wave_div_mod
 
-if(int((flambda-ilambda)/dlambda)>wavmax):
-    runs = int(((flambda-ilambda)/dlambda)/wavmax)
-    modulo = ((flambda-ilambda)/dlambda)%wavmax
-    if(modulo>0):
-        po = 1
-    else:
-        po = 0
-    for r in range(runs+po):
-        if r<runs:
-            nilam = r*wavmax*dlambda + ilambda
-            nflam = nilam+wavmax*dlambda
-        else:
-            nilam = runs*wavmax*dlambda + ilambda
-            nflam = nilam+modulo*dlambda
-        nwavt = int((nflam-nilam)/dlambda)
-        ul = r*wavmax+nwavt
-        ll = r*wavmax
-        wavt = wav[ll:ul]
-        tempflux = np.empty([nwavt,2])
-        #iout = np.arange(nwav*nzphi*nzth).reshape(nwav,nzphi,nzth)
-	if dopp!=0:
-	    if is_mpi == True:
-	        doppler_arr = doppler(interpmodel[:,4],incl[rank])
-	    else:
-	        doppler_arr = doppler(interpmodel[:,4],incl[0])
-	    sed = f.interp(ftable[ll:ul,:,:],wavt,angles,ext,dist,nfnames,ntheta,nwavt,nzth,nzphi,incl)
+
+runs = int(((flambdita-ilambdita)/dlambda)/wavmax)
+modulo = ((flambdita-ilambdita)/dlambda)%wavmax
+if(modulo>0):
+	po = 1
+else:
+	po = 0
+runs_arr = np.arange(rank*(runs),(rank+1)*(runs+po),1)
+
+print rank,ilambdita,flambdita,runs_arr
+
+"""
+for r in range(runs+po):
+	if r<runs:
+		nilam = r*wavmax*dlambda + ilambda
+		nflam = nilam+wavmax*dlambda
 	else:
-	    doppler_arr = np.zeros((len(cossquiggle[:,0]),len(cossquiggle[0,:])))
-	    sed = f.interp_nodopp(ftable[ll:ul,:,:],wavt,angles,ext,dist,nfnames,ntheta,nwavt,nzth,nzphi,incl)
-        
-        
-        if(r<10):
-            np.savetxt(ofln+"_i"+str(incl[rank])+".r0"+str(r),sed)
-        elif(r>=10):
-            np.savetxt(ofln+"_i"+str(incl[rank])+".r"+str(r),sed)
+		nilam = runs*wavmax*dlambda + ilambda
+		nflam = nilam+modulo*dlambda
+	nwavt = int((nflam-nilam)/dlambda)
+	ul = r*wavmax+nwavt
+	ll = r*wavmax
+	wavt = wav[ll:ul]
+	tempflux = np.empty([nwavt,2])
+	#iout = np.arange(nwav*nzphi*nzth).reshape(nwav,nzphi,nzth)
+	if dopp!=0:
+		if is_mpi == True:
+			doppler_arr = doppler(interpmodel[:,4],incl[rank])
+		else:
+			doppler_arr = doppler(interpmodel[:,4],incl[0])
+		sed = f.interp(ftable[ll:ul,:,:],wavt,angles,ext,dist,nfnames,ntheta,nwavt,nzth,nzphi,incl)
+	else:
+		doppler_arr = np.zeros((len(cossquiggle[:,0]),len(cossquiggle[0,:])))
+		sed = f.interp_nodopp(ftable[ll:ul,:,:],wavt,angles,ext,dist,nfnames,ntheta,nwavt,nzth,nzphi,incl)
+	
+	
+	if(r<10):
+		np.savetxt(ofln+"_i"+str(incl[rank])+".r0"+str(r),sed)
+	elif(r>=10):
+		np.savetxt(ofln+"_i"+str(incl[rank])+".r"+str(r),sed)
+"""
+"""
 else:
 	tempflux = np.empty([nwav,2])
 	#iout = np.arange(nwav*nzphi*nzth).reshape(nwav,nzphi,nzth)
@@ -411,7 +404,7 @@ if rank==0:
 
 
 
-
+"""
 """
 ##################JASON TABLE##############################
 f_r = interpolate.interp1d(interpmodel[:,0],interpmodel[:,1])

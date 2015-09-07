@@ -7,10 +7,10 @@ c  and generate apparent magnitudes in a few of the common filter systems.
 
       IMPLICIT NONE
       
-      INTEGER nlambda,i,j,nwave
-      PARAMETER(nlambda = 1048908)
+      INTEGER nlambda,i,j,nwave,nincl
+      PARAMETER(nlambda = 4549,nincl = 10)
 c 8846, 1048992
-      DOUBLE PRECISION lambda(nlambda),flux(nlambda,10)
+      DOUBLE PRECISION lambda(nlambda),flux(nlambda,nincl)
       
 
       OPEN(UNIT=11,FILE='outputflux')
@@ -26,7 +26,7 @@ c  filter set in it's own subroutine.
 
 
       DO i = 1,nlambda
-         READ(11,*,END=104) lambda(i),(flux(i,j),j=1,10)
+         READ(11,*,END=104) lambda(i),(flux(i,j),j=1,nincl)
  101     FORMAT(1d30.16,11d14.6)
       ENDDO
  104  nwave = i
@@ -91,15 +91,17 @@ c  linear interpolation.
 c  also, the question arises - these bands are all given at wavelengths 
 c  spacings of 10 angstroms - is it really necessary to have such fine
 c  spacing in my atmospheric models.
-      DO i = 1,nwave
+c      OPEN(UNIT=33,FILE='trans_U')
+      DO i = 2,nwave
 c  uband:
 c      write(*,*) j,i
          IF (lambda(i).GE.uwave(j).AND.lambda(i).LT.uwave(j+1)) THEN
             fract = (lambda(i)-uwave(j))/(uwave(j+1)-uwave(j))
             f = fract*uflux(j+1)+(1-fract)*uflux(j)
             DO n = 1,10
-               umag(n) = umag(n) + flux(i,n)*f*(lambda(i+1)-lambda(i-1))/2.
+            umag(n)=umag(n)+flux(i,n)*f*(lambda(i+1)-lambda(i-1))/2.
             ENDDO
+c            WRITE(33,*)lambda(i),flux(i,1)*f,(lambda(i+1)-lambda(i-1))/2.
          ENDIF
          IF (lambda(i).GE.uwave(j+1)) j = j+1
 c  b-band     
@@ -108,7 +110,7 @@ c  b-band
             fract = (lambda(i)-bwave(jj))/(bwave(jj+1)-bwave(jj))
             f = fract*bflux(jj+1)+(1-fract)*bflux(jj)
             DO n = 1,10
-               bmag(n) = bmag(n) + flux(i,n)*f*(lambda(i+1)-lambda(i-1))/2.
+            bmag(n)=bmag(n)+flux(i,n)*f*(lambda(i+1)-lambda(i-1))/2.
             ENDDO
          ENDIF
          IF (lambda(i).GE.bwave(jj+1)) jj = jj+1
@@ -117,7 +119,7 @@ c  v-band
             fract = (lambda(i)-vwave(k))/(vwave(k+1)-vwave(k))
             f = fract*vflux(k+1)+(1-fract)*vflux(k)
             DO n = 1,10
-               vmag(n) = vmag(n) + flux(i,n)*f*(lambda(i+1)-lambda(i-1))/2.
+            vmag(n)=vmag(n)+flux(i,n)*f*(lambda(i+1)-lambda(i-1))/2.
             ENDDO
          ENDIF
          IF (lambda(i).GE.vwave(k+1)) k = k+1
@@ -126,7 +128,7 @@ c r - band
             fract = (lambda(i)-rwave(kk))/(rwave(kk+1)-rwave(kk))
             f = fract*rflux(kk+1)+(1-fract)*rflux(kk)
             DO n = 1,10
-               rmag(n) = rmag(n) + flux(i,n)*f*(lambda(i+1)-lambda(i-1))/2.
+            rmag(n)=rmag(n)+flux(i,n)*f*(lambda(i+1)-lambda(i-1))/2.
             ENDDO
          ENDIF
          IF (lambda(i).GE.rwave(kk+1)) kk = kk+1
@@ -135,7 +137,7 @@ c  i-band
             fract = (lambda(i)-iwave(m))/(iwave(m+1)-iwave(m))
             f = fract*iflux(m+1)+(1-fract)*iflux(m)
             DO n = 1,10
-               imag(n) = imag(n) + flux(i,n)*f*(lambda(i+1)-lambda(i-1))/2.
+            imag(n)=imag(n)+flux(i,n)*f*(lambda(i+1)-lambda(i-1))/2.
             ENDDO
          ENDIF
          IF (lambda(i).GT.iwave(m+1)) m = m+1
