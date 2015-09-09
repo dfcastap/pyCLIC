@@ -14,8 +14,8 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 dr_arr = []
 phi = []
 model = []
-def modelread(dr_arr):
-    model = readpy.genfromfort("model")
+def modelread(model_name,dr_arr):
+    model = readpy.genfromfort(model_name)
     if len(model[:,0])==10:
         temp1 = model[::-1]
         temp2 =  np.tile(0.,(20,5))
