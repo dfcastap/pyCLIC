@@ -145,7 +145,7 @@ def doppler(vel,incl):
     return dopp_arr
     
 
-def run_CLIC(model_name,incl,is_mpi,ilambda,flambda,dlambda):
+def run_CLIC(model_name,incl,is_mpi,ilambda,flambda,dlambda,par,dt_grid=250,dg_grid = 1./3.):
     global phi,c,deltal
     global dth,dr_arr,alambda
     global which_os
@@ -159,8 +159,8 @@ def run_CLIC(model_name,incl,is_mpi,ilambda,flambda,dlambda):
     #incl = [0.0,10.,20.,30.,45.,50.,60.,70.,80.,90.]	# Inclinations to compute [deg]
     # Atmospheric Grid Specs:
     
-    dt_grid = 250.
-    dg_grid = 1./3.	# Step in log(g)[cgs]
+    #dt_grid = 250.
+    #dg_grid = 1./3.	# Step in log(g)[cgs]
     """
     if (len(sys.argv) > 4):
        dt_grid = float(sys.argv[4])	# Step in Teff [Teff]
@@ -227,7 +227,7 @@ def run_CLIC(model_name,incl,is_mpi,ilambda,flambda,dlambda):
     ## Generate the interpolated model of the integration grid:
     dr_arr = np.empty(21,dtype=float)
     phi = np.linspace(0,360.-360./nzphi,nzphi)
-    model = modelread(model_name,dr_arr)
+    model = modelread(model_name,dr_arr,par)
     interpmodel = modelinterpolate(model,dr_arr,nzth,nzphi)
     cossquiggle = []
     darea = []
@@ -457,4 +457,4 @@ def run_CLIC(model_name,incl,is_mpi,ilambda,flambda,dlambda):
     #pl.show()
     return
     
-run_CLIC("model",[0.],is_mpi,3000.,12099.,2.0)
+#run_CLIC("2p5Msun_V0_CLIC_s",[0.],is_mpi,3000.,12099.,2.0)

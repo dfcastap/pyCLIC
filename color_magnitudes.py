@@ -102,4 +102,4 @@ plt.plot(flux[:,0],johnson_R_i*flux[:,1])
 plt.plot(flux[:,0],johnson_I_i*flux[:,1])
 """
 
-#calc_mags("outputflux_i0.0_3000-12099A",[0.0],51,1)
+calc_mags("outputflux_i0.0.final",[0.0],0,0)

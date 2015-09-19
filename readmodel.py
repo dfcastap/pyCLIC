@@ -14,7 +14,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 dr_arr = []
 phi = []
 model = []
-def modelread(model_name,dr_arr):
+def modelread(model_name,dr_arr,par):
     model = readpy.genfromfort(model_name)
     if len(model[:,0])==10:
         temp1 = model[::-1]
@@ -26,7 +26,9 @@ def modelread(model_name,dr_arr):
                 temp2[i,0] = i*(9.)+4.5
                 temp2[i,1:5] = temp1[i-10,1:5]
         model=1.*temp2
-          
+    
+    if par=="ODD":
+        model = readpy.genfromfort(model_name)
     
     dr_arr[0] = 0.
     dr_arr[1:20] = (np.diff(model[:,1]))
