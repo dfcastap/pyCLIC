@@ -2,17 +2,25 @@
 """
 Created on Mon Mar  11 14:07:46 2013
 
+___  _   _ ____ _    _ ____    
+|__]  \_/  |    |    | |       
+|      |   |___ |___ | |___    
+
+
 @author: Diego Castaneda
+
+Based on the Fortran code of Catherine Lovekin (2006ApJ...643..460L), 
+it calculates the observed SED of a rotating stellar model at any inclination. 
+It relies on PHOENIX atmospheric models (more specifically, the *.70 
+intensity files).
+
 """
 #### MPI run?----
 is_mpi = False
 #### ------------
 
 import numpy as np
-#import readpy
-#from scipy import interpolate
-#from scipy.interpolate import InterpolatedUnivariateSpline
-#import pylab as pl
+
 import glob,os,subprocess
 import fluxtable as f
 import sys
@@ -23,6 +31,19 @@ if is_mpi==True:
 	from mpi4py import MPI
 	
 def xi(i,r1,theta,dr,phi):
+    """
+    Function that calculates xi (squiggle).
+    (see eq. 8, Lovekin et. al. 2006 for details!)
+    Parameters:
+        i: inclination
+        r1: radius
+        theta: colatitude 
+        dr: 
+        phi: 
+
+    Returns:
+        Cos(xi) 
+    """
     global dth,dr_arr,alambda
     dx1 = np.sin(np.deg2rad(i))
     #    dy1 = 0.
@@ -47,6 +68,18 @@ def xi(i,r1,theta,dr,phi):
     return cosang
         
 def genatmgridvals(model,dt_grid,dg_grid):
+    """
+    Based on the atmospheric grid specification, it calculates
+    the interpolation factors required to map the surface of the
+    star with the given PHOENIX intensity files
+
+    Parameters:
+        model: stellar surface properties
+        dt_grid: step in T of atmosphere grid
+        dg_grid: step in log(g) of atmosphere grid
+    Returns:
+        array of interpolation weight factors
+    """
     global factor_t
     tup = dt_grid*np.floor(model[:,2]/dt_grid)+dt_grid
     tdown = dt_grid*np.floor(model[:,2]/dt_grid)
@@ -56,9 +89,17 @@ def genatmgridvals(model,dt_grid,dg_grid):
     factor_g = (model[:,3]-gdown)/(gup-gdown)
     return np.array(np.transpose([tup,tdown,gup,gdown,factor_t,factor_g]))
         
-    # Definition of functions
 
 def genfilenames(tandg):
+    """
+    This function, based on the model, generate the filename list
+    of PHOENIX atmosphere files required for pyCLIC to run
+
+    Parameters:
+        tandg: matrix of temperatures and log(g) needed for the run
+    Returns:
+        sorted list of PHOENIX filenames
+    """
     fnames = []
     for i in range(len(tandg)):
         if int(tandg[i,2]*10) == 39: tandg[i,2] = 4.0
@@ -72,6 +113,17 @@ def genfilenames(tandg):
     return np.sort(list(set(fnames)))
     
 def getatmkeys(tandg,atmfiles):
+    """
+    This function relates the PHOENIX file names to the interpolating
+    factors.
+
+    Parameters:
+        tandg: matrix of temperatures and log(g) needed for the run
+        atmfiles: sorted list of PHOENIX filenames
+    Returns:
+        Array to match the interpolation weight factors with the index
+        of the atmosphere filename list
+    """
     keys = np.zeros((len(tandg[:,0]),4))
     atmvals = []
     for s in atmfiles:
@@ -87,6 +139,15 @@ def getatmkeys(tandg,atmfiles):
     return np.array(keys)
 
 def copyatmfiles(atmdir,atmfiles):
+    """
+    Copy the atmospheric files to the cwd
+
+    Parameters:
+        atmdir: path to *.tar.gz PHOENIX *.70 files
+        atmfiles: list of files to copy
+    Return:
+        Nothing...
+    """
     global which_os
     for i in range(len(atmfiles)):
 		tmpfl = glob.glob(atmdir+atmfiles[i]+".gz")
@@ -100,6 +161,15 @@ def copyatmfiles(atmdir,atmfiles):
     return
     
 def copyatmfiles_i(atmdir,atmfiles):
+    """
+    Copy the (already interpolated *.70.i) atmospheric files to the cwd
+
+    Parameters:
+        atmdir: path to PHOENIX *.70.i files
+        atmfiles: list of files to copy
+    Return:
+        Nothing...
+    """
     global which_os
     
     for i in range(len(atmfiles)):
@@ -113,6 +183,17 @@ def copyatmfiles_i(atmdir,atmfiles):
     return
     
 def interpatms(atmfiles,ilambda,flambda,dlambda):
+    """
+    Set up the interpolation input file. This uses Aaron Gillich
+    PHOENIX files interpolation routine
+    Parameters:
+        atmfiles: list of files to interpolate
+        ilambda: target initial wavelength
+        flambda: target final wavelength
+        dlambda: target wavelength step
+    Return:
+        Nothing...
+    """
     global which_os
     f = open('wavelength.nml','w')
     f.write("$lambdas \n")
@@ -134,6 +215,14 @@ def interpatms(atmfiles,ilambda,flambda,dlambda):
     return
     
 def doppler(vel,incl):
+    """
+    Calculates the Doppler factor at every point on the surface mesh
+    Parameters:
+        vel: rotational velocity
+        incl: inclination
+    Returns:
+        Array of doppler factors
+    """
     global phi,c,deltal
     #Speed of light
     c= 2.99792458e10
@@ -145,7 +234,25 @@ def doppler(vel,incl):
     return dopp_arr
     
 
-def run_CLIC(model_name,incl,is_mpi,ilambda,flambda,dlambda,par,dt_grid=250,dg_grid = 1./3.):
+def run_CLIC(model_name,incl,is_mpi,ilambda,flambda,dlambda,par,dt_grid=250,dg_grid = 1./3.,dopp = False):
+    """
+    Main routine. Defines most of the run. Should probably use an external parameter file...
+    Currently one run per inclination (it's fairly fast though: ~5 minutes / 10000 wavelength points)
+    If you're desperate you can do an MPI run: One inclination / core
+    Parameters:
+        model_name: model filename
+        incl: array, target inclination(s) - len > 1 requires MPI
+        is_mpi: Bool, is it mpi?
+        ilambda: target initial wavelength
+        flambda: target final wavelength
+        dlambda: target wavelength step
+        par: (for mode visibility) is it even or odd mode ---
+        dt_grid: step in T of atmosphere grid
+        dg_grid: step in log(g) of atmosphere grid
+        dopp: Bool. include doppler effects? 
+    Returns:
+        Nothing, it writes out a 
+    """
     global phi,c,deltal
     global dth,dr_arr,alambda
     global which_os
@@ -179,12 +286,13 @@ def run_CLIC(model_name,incl,is_mpi,ilambda,flambda,dlambda,par,dt_grid=250,dg_g
     	ilambda = 8000. # [angstrom]
     	flambda = 19999. # [angstrom]
     """
-    #is there a doppler flag?
-    dopp = 0
-    #if (len(sys.argv) > 5):
-    #    dopp = float(sys.argv[5])
-    
-    #dopp = 1
+    #include doppler effects?
+    if dopp==False:
+        dopp = 0
+    else:
+        dopp = 1
+
+
     ofln="outputflux"
     if(dopp!=0):
         ofln="lineflux" 
@@ -418,43 +526,7 @@ def run_CLIC(model_name,incl,is_mpi,ilambda,flambda,dlambda,par,dt_grid=250,dg_g
                         cmd1 = "cat "+ofln+"_i"+str(i)+"_*"+" > "+ofln+"_i"+str(i)+".final"
                         subprocess.call(cmd1,shell=True)
     
-    #This next block creates a file with the wavelenght range:
-    #if rank==0:                    
-    #    if dopp!=0:
-    #        for i in incl:
-    #            cmd1 = "mv "+ofln+"_i"+str(i)+" "+ofln+"_i"+str(i)+"_"+str(int(ilambda))+"-"+str(int(flambda))+"A"
-    #            exit = subprocess.call(cmd1,shell=True)
-    
-    
-    
-    
-    """
-    ##################JASON TABLE##############################
-    f_r = interpolate.interp1d(interpmodel[:,0],interpmodel[:,1])
-    jangles = np.genfromtxt('Jtableangles.dat')
-    values = []
-    k=0
-    for i in range(len(interpmodel[:,0])):
-        for j in range(len(phi)):
-            #print np.round(interpmodel[i,0]),np.round(jangles[k,0]),np.round(phi[j]),np.round(jangles[k,1])
-            if(np.round(interpmodel[i,0])==np.round(jangles[k,0]) and np.round(phi[j])==np.round(jangles[k,1])):
-                values.append(np.array([interpmodel[i,0],phi[j],np.log10(iout[0,j,i]),darea[j,i],cossquiggle[j,i],correct[i]]))
-                #print interpmodel[i,0],interpmodel[i,1]
-                k+=1
-                if (k >= len(jangles[:,0])):
-                    k=0
-    
-    values = np.array(values)
-    np.savetxt('jTable.dat',values)
-    #########################################################33333
-    """
-    #theta = np.linspace(0,180,nzth)
-    #pl.plot(theta,alambda)
-    #oldClic = readpy.genfromfort("outputflux",ncols=(0,1))
-    #pl.plot(fout[:,0],fout[:,1],"x")
-    #pl.plot(fout[:,0],fout[:,1]/oldClic[0:200,1])
-    #pl.plot(oldClic[:,0],oldClic[:,1])
-    #pl.show()
+
     return
     
 #run_CLIC("2p5Msun_V0_CLIC_s",[0.],is_mpi,3000.,12099.,2.0)
